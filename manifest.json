@@ -1,0 +1,22 @@
+{
+  "name": "طيّار للتوصيل",
+  "short_name": "طيّار",
+  "description": "توصيل سريع في أي مكان",
+  "start_url": "/Index.html",
+  "display": "standalone",
+  "background_color": "#0A0A0A",
+  "theme_color": "#C9A84C",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "https://api.dicebear.com/7.x/icons/svg?seed=tayar&backgroundColor=C9A84C",
+      "sizes": "192x192",
+      "type": "image/svg+xml"
+    },
+    {
+      "src": "https://api.dicebear.com/7.x/icons/svg?seed=tayar&backgroundColor=C9A84C",
+      "sizes": "512x512",
+      "type": "image/svg+xml"
+    }
+  ]
+}
