@@ -469,15 +469,21 @@ async function poll() {
     }
   }
 
-  // Show restaurant name next to order number (first time only)
-  if (data.restaurant && !document.getElementById('restLabel')) {
-    const chip = document.getElementById('orderChip');
-    if (chip) {
-      const restSpan = document.createElement('div');
-      restSpan.id = 'restLabel';
-      restSpan.style.cssText = 'font-size:11px;color:#FF6B35;font-weight:800;text-align:center;margin-top:2px';
-      restSpan.textContent = data.restaurant;
-      chip.appendChild(restSpan);
+  // Show restaurant names in chip (first time only)
+  if (!document.getElementById('restLabel')) {
+    let items = [];
+    try { items = data.items ? JSON.parse(data.items) : []; } catch(e) {}
+    const rests = [...new Set(items.map(i => i.restName).filter(Boolean))];
+    const displayRest = rests.length > 0 ? rests.join(' • ') : data.restaurant;
+    if (displayRest) {
+      const chip = document.getElementById('orderChip');
+      if (chip) {
+        const restSpan = document.createElement('div');
+        restSpan.id = 'restLabel';
+        restSpan.style.cssText = 'font-size:10px;color:#FF6B35;font-weight:800;text-align:center;margin-top:2px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
+        restSpan.textContent = displayRest;
+        chip.appendChild(restSpan);
+      }
     }
   }
 }
@@ -508,6 +514,19 @@ function openInvoice() {
     const qrSrc  = canvas ? canvas.toDataURL() : '';
     document.body.removeChild(tmp);
 
+    // Group items by restaurant
+    const groups = {};
+    items.forEach(it => {
+      const k = it.restName || order.restaurant || 'الطلب';
+      if (!groups[k]) groups[k] = [];
+      groups[k].push(it);
+    });
+    const restNames = Object.keys(groups);
+    const multiRest = restNames.length > 1;
+
+    // Status label
+    const statusLabels = { Pending:'⏳ قيد الانتظار', 'On The Way':'🛵 في الطريق', Delivered:'✅ تم التسليم' };
+
     document.getElementById('invBody').innerHTML = `
       <div class="inv-head">
         <div>
@@ -519,21 +538,24 @@ function openInvoice() {
       <div class="inv-sep"></div>
       <div class="inv-kv"><span>رقم الطلب</span><b>#${order.order_number}</b></div>
       <div class="inv-kv"><span>التاريخ</span><b>${dateStr}</b></div>
-      <div class="inv-kv"><span>الحالة</span><b>✅ تم التسليم</b></div>
+      <div class="inv-kv"><span>الحالة</span><b>${statusLabels[order.status] || order.status}</b></div>
       <div class="inv-sep"></div>
       <div class="inv-kv"><span>العميل</span><b>${order.customer_name}</b></div>
       <div class="inv-kv"><span>الهاتف</span><b>${order.phone}</b></div>
-      ${order.restaurant ? `<div class="inv-kv"><span>المطعم</span><b>${order.restaurant}</b></div>` : ''}
+      <div class="inv-kv"><span>${multiRest ? 'المطاعم' : 'المطعم'}</span><b>${restNames.join(' • ')}</b></div>
       ${order.order_type ? `<div class="inv-kv"><span>نوع التوصيل</span><b>${order.order_type}</b></div>` : ''}
 
       ${items.length > 0 ? `
         <div class="inv-items-hd">الوجبات المطلوبة</div>
-        ${items.map(it=>`
-          <div class="inv-it">
-            <span class="inv-it-name">${it.name}</span>
-            <span class="inv-it-qty">× ${it.qty}</span>
-            <span class="inv-it-price">${it.price * it.qty} ج</span>
-          </div>`).join('')}
+        ${restNames.map(rn => `
+          ${multiRest ? `<div style="font-size:11px;font-weight:800;color:#FF6B35;padding:6px 0 4px;border-top:1px dashed #f0f0f0;margin-top:4px">🍽️ ${rn}</div>` : ''}
+          ${groups[rn].map(it=>`
+            <div class="inv-it">
+              <span class="inv-it-name">${it.name}</span>
+              <span class="inv-it-qty">× ${it.qty}</span>
+              <span class="inv-it-price">${it.price * it.qty} ج</span>
+            </div>`).join('')}
+        `).join('')}
       ` : ''}
 
       <div class="inv-totbox">
@@ -567,6 +589,16 @@ function downloadPDF() {
   const delivery = order.total && sub ? order.total - sub : 15;
   const grand    = order.total || sub + delivery;
 
+  // Group by restaurant
+  const groups = {};
+  items.forEach(it => {
+    const k = it.restName || order.restaurant || 'الطلب';
+    if (!groups[k]) groups[k] = [];
+    groups[k].push(it);
+  });
+  const restNames = Object.keys(groups);
+  const multiRest = restNames.length > 1;
+
   const L = (txt, x, yy, size=9, bold=false, align='right') => {
     doc.setFontSize(size); doc.setFont('helvetica', bold?'bold':'normal');
     doc.text(String(txt), x, yy, {align});
@@ -588,15 +620,25 @@ function downloadPDF() {
 
   L('Customer:', 5, y, 8, true, 'left'); L(order.customer_name, W-5, y, 8, false, 'right'); y+=5;
   L('Phone:', 5, y, 8, true, 'left'); L(order.phone, W-5, y, 8, false, 'right'); y+=5;
-  if (order.restaurant) { L('Restaurant:', 5, y, 8, true, 'left'); L(order.restaurant, W-5, y, 8, false, 'right'); y+=5; }
+  // Show all restaurants
+  L(multiRest ? 'Restaurants:' : 'Restaurant:', 5, y, 8, true, 'left');
+  L(restNames.join(', '), W-5, y, 7, false, 'right'); y+=5;
   sep(y); y+=5;
 
   if (items.length > 0) {
     L('ITEMS', W/2, y, 8, true, 'center'); y+=5;
-    items.forEach(it => {
-      L(it.name, 5, y, 8, false, 'left');
-      L(`x${it.qty}  ${it.price*it.qty} EGP`, W-5, y, 8, false, 'right');
-      y+=5;
+    // Print grouped by restaurant
+    restNames.forEach(rn => {
+      if (multiRest) {
+        doc.setTextColor(255,107,53);
+        L('> ' + rn, 5, y, 7, true, 'left');
+        doc.setTextColor(30,30,30); y+=4;
+      }
+      groups[rn].forEach(it => {
+        L(it.name, 5, y, 8, false, 'left');
+        L(`x${it.qty}  ${it.price*it.qty} EGP`, W-5, y, 8, false, 'right');
+        y+=5;
+      });
     });
     sep(y); y+=5;
   }
