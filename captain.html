@@ -639,7 +639,7 @@
 </div>
 
 <!-- Stats -->
-<div class="stats-bar">
+<div class="stats-bar" style="grid-template-columns:repeat(4,1fr)">
   <div class="stat-card">
     <div class="stat-num" id="statTotal">—</div>
     <div class="stat-label">إجمالي الطلبات</div>
@@ -651,6 +651,10 @@
   <div class="stat-card">
     <div class="stat-num" id="statDone" style="color: var(--done-color)">—</div>
     <div class="stat-label">مكتملة</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-num" id="statRevenue" style="color: var(--gold);font-size:18px">—</div>
+    <div class="stat-label">الإيرادات ج</div>
   </div>
 </div>
 
@@ -744,6 +748,8 @@ async function loadOrders() {
   document.getElementById('statTotal').textContent   = data.length;
   document.getElementById('statPending').textContent = data.filter(o => o.status === 'Pending').length;
   document.getElementById('statDone').textContent    = data.filter(o => o.status === 'Delivered').length;
+  const revenue = data.filter(o => o.status === 'Delivered').reduce((s,o) => s + (o.total||0), 0);
+  document.getElementById('statRevenue').textContent = revenue > 0 ? revenue : '—';
 
   const container = document.getElementById('orders');
   container.innerHTML = '';

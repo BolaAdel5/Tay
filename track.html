@@ -52,7 +52,7 @@ body{font-family:'Cairo',sans-serif;height:100vh;overflow:hidden;background:#f5f
 .back-btn:hover{box-shadow:0 4px 14px rgba(0,0,0,.15)}
 .top-brand{font-size:17px;font-weight:900;color:var(--gold);letter-spacing:1px}
 .order-chip{background:#f5f5f5;border:1px solid #e8e8e8;padding:5px 13px;
-  border-radius:50px;font-size:12px;font-weight:700;color:#555}
+  border-radius:12px;font-size:12px;font-weight:700;color:#555;text-align:center;line-height:1.4}
 .order-chip b{color:#111}
 
 /* ── BOTTOM SHEET ── */
@@ -140,10 +140,11 @@ body{font-family:'Cairo',sans-serif;height:100vh;overflow:hidden;background:#f5f
 .toast.show{transform:translateX(-50%) translateY(0)}
 
 /* ── INVOICE BTN ── */
-.inv-btn{display:flex;align-items:center;justify-content:center;gap:8px;
+.inv-btn{display:none;align-items:center;justify-content:center;gap:8px;
   margin:0 16px 16px;padding:12px;border:1.5px solid #e0e0e0;border-radius:14px;
   background:#fff;font-family:'Cairo',sans-serif;font-size:14px;font-weight:800;
   color:#7C3AED;cursor:pointer;transition:all .2s;width:calc(100% - 32px)}
+.inv-btn.inv-btn-visible{display:flex}
 .inv-btn:hover{background:#f5f0ff;border-color:#9F67F5}
 
 /* ── INVOICE MODAL ── */
@@ -218,7 +219,7 @@ body{font-family:'Cairo',sans-serif;height:100vh;overflow:hidden;background:#f5f
 <div class="topbar">
   <a href="Index.html" class="back-btn">←</a>
   <span class="top-brand">🛵 طيّار</span>
-  <div class="order-chip">طلب #<b id="orderNum">—</b></div>
+  <div class="order-chip" id="orderChip">طلب #<b id="orderNum">—</b></div>
 </div>
 
 <!-- Bottom Sheet -->
@@ -271,7 +272,7 @@ body{font-family:'Cairo',sans-serif;height:100vh;overflow:hidden;background:#f5f
   </div>
 
   <!-- Invoice button -->
-  <button class="inv-btn" id="invBtn" onclick="openInvoice()" style="display:none">
+  <button class="inv-btn" id="invBtn" onclick="openInvoice()">
     🧾 عرض وتحميل الفاتورة
   </button>
 </div>
@@ -459,8 +460,28 @@ async function poll() {
   // Delivered
   if (data.status==='Delivered') {
     if (driverMarker) { map.removeLayer(driverMarker); driverMarker=null; }
-    if (!celebShown) { celebShown=true; vibrate(); beep(); setTimeout(()=>document.getElementById('celebWrap').classList.add('show'),700); }
-    document.getElementById('invBtn').style.display = 'flex'; // show invoice btn
+    if (!celebShown) {
+      celebShown=true; vibrate(); beep();
+      setTimeout(()=>document.getElementById('celebWrap').classList.add('show'),700);
+    }
+    // Show invoice button
+    const invBtn = document.getElementById('invBtn');
+    invBtn.style.display = 'flex';
+    invBtn.style.removeProperty('display');
+    invBtn.removeAttribute('style');
+    invBtn.classList.add('inv-btn-visible');
+  }
+
+  // Show restaurant name next to order number (first time only)
+  if (data.restaurant && !document.getElementById('restLabel')) {
+    const chip = document.getElementById('orderChip');
+    if (chip) {
+      const restSpan = document.createElement('div');
+      restSpan.id = 'restLabel';
+      restSpan.style.cssText = 'font-size:11px;color:#FF6B35;font-weight:800;text-align:center;margin-top:2px';
+      restSpan.textContent = data.restaurant;
+      chip.appendChild(restSpan);
+    }
   }
 }
 
