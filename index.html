@@ -434,6 +434,12 @@ input, select, textarea { font-family: inherit; }
 }
 
 /* Cart items */
+.cart-rest-group { margin-bottom: 4px; }
+.cart-rest-label {
+  font-size: 12px; font-weight: 800; color: var(--brand);
+  padding: 8px var(--px) 4px;
+  display: flex; align-items: center; gap: 6px;
+}
 .cart-item {
   display: flex; align-items: center; gap: 12px;
   padding: 14px var(--px);
@@ -1187,9 +1193,9 @@ function goTo(id) {
   updateCart();
   if (id === 'cart')     renderCart();
   if (id === 'checkout') renderCoSummary();
-  // float btn
+  // float btn — show on home AND menu
   const fb = document.getElementById('floatCartBtn');
-  fb.classList.toggle('show', id === 'menu' && cart.length > 0);
+  fb.classList.toggle('show', (id === 'menu' || id === 'home') && cart.length > 0);
 }
 
 function goBack() { goTo(prevScreen || 'home'); }
@@ -1414,7 +1420,7 @@ function addFromModal() {
   if (!modalItem) return;
   const existing = cart.find(c => c.id === modalItem.id);
   if (existing) existing.qty = mqQty;
-  else cart.push({ ...modalItem, qty: mqQty, restId: currentRest?.id, restName: currentRest?.name });
+  else cart.push({ ...modalItem, qty: mqQty, restId: currentRest?.id, restName: currentRest?.name, restIcon: currentRest?.icon });
   updateCart();
   refreshQtyControls();
   closeModal();
@@ -1432,7 +1438,7 @@ function quickAdd(id) {
   if (!item) return;
   const ex = cart.find(c => c.id === id);
   if (ex) ex.qty++;
-  else cart.push({ ...item, qty: 1, restId: currentRest?.id, restName: currentRest?.name });
+  else cart.push({ ...item, qty: 1, restId: currentRest?.id, restName: currentRest?.name, restIcon: currentRest?.icon });
   updateCart();
   refreshQtyControls();
   toast(`✅ ${item.name}`, 'ok');
@@ -1477,12 +1483,12 @@ function updateCart() {
   const dot = document.getElementById('navDot');
   dot.textContent = cnt; dot.classList.toggle('on', cnt > 0);
 
-  // Float cart btn
+  // Float cart btn — show on home AND menu
   const fb = document.getElementById('floatCartBtn');
   document.getElementById('fbMeta').textContent = cnt + ' عنصر';
   document.getElementById('fbPrice').textContent = (tot + fee) + ' ج';
-  if (document.querySelector('#sc-menu.active'))
-    fb.classList.toggle('show', cnt > 0);
+  const onBrowse = document.querySelector('#sc-menu.active') || document.querySelector('#sc-home.active');
+  if (onBrowse) fb.classList.toggle('show', cnt > 0);
   else fb.classList.remove('show');
 
   // Cart proceed btn
@@ -1506,30 +1512,47 @@ function renderCart() {
     document.getElementById('cartSummary').style.display = 'none';
     return;
   }
-  body.innerHTML = cart.map(item => `
-    <div class="cart-item">
-      <div class="ci-img">
-        ${item.img ? `<img src="${item.img}" loading="lazy" alt="${item.name}" onerror="this.style.display='none'">` : '🍽️'}
-      </div>
-      <div class="ci-info">
-        <div class="ci-name">${item.name}</div>
-        <div class="ci-rest">${item.restName || ''}</div>
-        <div class="ci-ctrl">
-          <button class="ci-ctrl-btn" onclick="changeQty(${item.id},-1)">−</button>
-          <div class="ci-ctrl-num">${item.qty}</div>
-          <button class="ci-ctrl-btn" onclick="changeQty(${item.id},1)">+</button>
+
+  // Group by restaurant
+  const groups = {};
+  cart.forEach(item => {
+    const key = item.restName || 'متنوع';
+    if (!groups[key]) groups[key] = { icon: item.restIcon || '🍽️', items: [] };
+    groups[key].items.push(item);
+  });
+
+  body.innerHTML = Object.entries(groups).map(([restName, g]) => `
+    <div class="cart-rest-group">
+      <div class="cart-rest-label">${g.icon} ${restName}</div>
+      ${g.items.map(item => `
+        <div class="cart-item">
+          <div class="ci-img">
+            ${item.img ? `<img src="${item.img}" loading="lazy" alt="${item.name}" onerror="this.style.display='none'">` : '🍽️'}
+          </div>
+          <div class="ci-info">
+            <div class="ci-name">${item.name}</div>
+            <div class="ci-ctrl">
+              <button class="ci-ctrl-btn" onclick="changeQty(${item.id},-1)">−</button>
+              <div class="ci-ctrl-num">${item.qty}</div>
+              <button class="ci-ctrl-btn" onclick="changeQty(${item.id},1)">+</button>
+            </div>
+          </div>
+          <div class="ci-price">${item.price * item.qty} ج</div>
+          <button class="ci-del" onclick="removeFromCart(${item.id})" title="حذف">🗑</button>
         </div>
-      </div>
-      <div class="ci-price">${item.price * item.qty} ج</div>
-      <button class="ci-del" onclick="removeFromCart(${item.id})" title="حذف">🗑</button>
+      `).join('')}
     </div>
   `).join('');
 
   const fee = deliveryFee();
   const sub = cartTotal();
+  const rests = [...new Set(cart.map(i => i.restName).filter(Boolean))];
   const summary = document.getElementById('cartSummary');
   summary.style.display = 'block';
   summary.innerHTML = `
+    ${rests.length > 1 ? `<div style="font-size:12px;color:var(--t3);margin-bottom:8px;padding:8px 12px;background:var(--s2);border-radius:10px">
+      📦 طلب من <b style="color:var(--t1)">${rests.length} مطاعم</b>: ${rests.join(' • ')}
+    </div>` : ''}
     <div class="cs-row"><span>المجموع الجزئي</span><span>${sub} ج</span></div>
     <div class="cs-row"><span>رسوم التوصيل</span><span class="${fee===0?'cs-free':''}">${fee===0?'مجاني 🎉':fee+' ج'}</span></div>
     ${fee>0?`<div style="font-size:11px;color:var(--t3);padding:2px 0">أضف ${150-sub} ج للتوصيل المجاني</div>`:''}
@@ -1539,19 +1562,36 @@ function renderCart() {
 
 function renderCoSummary() {
   const el = document.getElementById('coOrderSummary');
-  if (!currentRest || !cart.length) { el.innerHTML = ''; return; }
+  if (!cart.length) { el.innerHTML = ''; return; }
+
+  // Group by restaurant
+  const groups = {};
+  cart.forEach(i => {
+    const k = i.restName || 'متنوع';
+    if (!groups[k]) groups[k] = [];
+    groups[k].push(i);
+  });
+
+  const rests = Object.keys(groups);
   el.innerHTML = `
-    <div class="co-section-title">تفاصيل الطلب</div>
-    ${cart.map(i => `
-      <div class="co-row">
-        <span class="co-label">${i.name} × ${i.qty}</span>
-        <span class="co-val">${i.price * i.qty} ج</span>
+    <div class="co-section-title">تفاصيل طلبك</div>
+    ${rests.map(rName => `
+      <div style="margin-bottom:10px">
+        <div style="font-size:12px;font-weight:800;color:var(--brand);margin-bottom:6px;
+          padding:4px 8px;background:var(--brand-dim);border-radius:8px;display:inline-block">
+          🍽️ ${rName}
+        </div>
+        ${groups[rName].map(i => `
+          <div class="co-row">
+            <span class="co-label">${i.name} × ${i.qty}</span>
+            <span class="co-val">${i.price * i.qty} ج</span>
+          </div>
+        `).join('')}
       </div>
     `).join('')}
-    <div class="co-row" style="border-top:1px solid var(--b2);margin-top:4px">
-      <span class="co-label" style="font-weight:800">المطعم</span>
-      <span class="co-val">${currentRest.icon} ${currentRest.name}</span>
-    </div>
+    ${rests.length > 1 ? `<div style="font-size:11px;color:var(--t3);padding:6px 0 0;border-top:1px solid var(--b2)">
+      📦 سيتم توصيل طلبك من ${rests.length} مطاعم في رحلة واحدة
+    </div>` : ''}
   `;
 }
 
@@ -1577,11 +1617,12 @@ async function submitOrder() {
   navigator.geolocation.getCurrentPosition(async pos => {
     const orderNum = Math.floor(1000 + Math.random() * 9000);
     const fee = deliveryFee() + (type === 'سريع' ? 15 : 0);
+    const allRests = [...new Set(cart.map(i => i.restName).filter(Boolean))].join(' • ');
     const { error } = await db.from('orders').insert([{
       order_number: orderNum, customer_name: name, phone,
       customer_lat: pos.coords.latitude, customer_lng: pos.coords.longitude,
-      order_type: type, notes, restaurant: currentRest?.name,
-      items: JSON.stringify(cart.map(i => ({ name: i.name, qty: i.qty, price: i.price }))),
+      order_type: type, notes, restaurant: allRests || currentRest?.name,
+      items: JSON.stringify(cart.map(i => ({ name: i.name, qty: i.qty, price: i.price, restName: i.restName }))),
       total: cartTotal() + fee, status: 'Pending'
     }]);
 
