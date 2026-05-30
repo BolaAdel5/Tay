@@ -466,7 +466,8 @@ input, select, textarea { font-family: inherit; }
 }
 .ci-ctrl-btn:active { background: var(--s3); }
 .ci-ctrl-num { font-size: 14px; font-weight: 800; min-width: 20px; text-align: center; color: var(--t1); }
-.ci-price { font-size: 16px; font-weight: 900; color: var(--t1); flex-shrink: 0; }
+.ci-price { font-size: 16px; font-weight: 900; color: var(--t1); }
+.ci-right { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; flex-shrink: 0; }
 .ci-del { width: 32px; height: 32px; background: transparent; border: none;
   color: var(--t4); font-size: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center;
   border-radius: 8px; transition: color .2s, background .2s; flex-shrink: 0; }
@@ -1536,34 +1537,25 @@ function renderCart() {
     return;
   }
 
-  // Group by restaurant
-  const groups = {};
-  cart.forEach(item => {
-    const key = item.restName || 'متنوع';
-    if (!groups[key]) groups[key] = { icon: item.restIcon || '🍽️', items: [] };
-    groups[key].items.push(item);
-  });
-
-  body.innerHTML = Object.entries(groups).map(([restName, g]) => `
-    <div class="cart-rest-group">
-      <div class="cart-rest-label">${g.icon} ${restName}</div>
-      ${g.items.map(item => `
-        <div class="cart-item">
-          <div class="ci-img">
-            ${item.img ? `<img src="${item.img}" loading="lazy" alt="${item.name}" onerror="this.style.display='none'">` : '🍽️'}
-          </div>
-          <div class="ci-info">
-            <div class="ci-name">${item.name}</div>
-            <div class="ci-ctrl">
-              <button class="ci-ctrl-btn" onclick="changeQty(${item.id},-1)">−</button>
-              <div class="ci-ctrl-num">${item.qty}</div>
-              <button class="ci-ctrl-btn" onclick="changeQty(${item.id},1)">+</button>
-            </div>
-          </div>
-          <div class="ci-price">${item.price * item.qty} ج</div>
-          <button class="ci-del" onclick="removeFromCart(${item.id})" title="حذف">🗑</button>
+  // Render each item with its restaurant name inline
+  body.innerHTML = cart.map(item => `
+    <div class="cart-item">
+      <div class="ci-img">
+        ${item.img ? `<img src="${item.img}" loading="lazy" alt="${item.name}" onerror="this.style.display='none'">` : '🍽️'}
+      </div>
+      <div class="ci-info">
+        <div class="ci-name">${item.name}</div>
+        ${item.restName ? `<div style="font-size:11px;color:var(--brand);font-weight:700;margin-bottom:4px">${item.restIcon||'🍽️'} ${item.restName}</div>` : ''}
+        <div class="ci-ctrl">
+          <button class="ci-ctrl-btn" onclick="changeQty(${item.id},-1)">−</button>
+          <div class="ci-ctrl-num">${item.qty}</div>
+          <button class="ci-ctrl-btn" onclick="changeQty(${item.id},1)">+</button>
         </div>
-      `).join('')}
+      </div>
+      <div class="ci-right">
+        <div class="ci-price">${item.price * item.qty} ج</div>
+        <button class="ci-del" onclick="removeFromCart(${item.id})" title="حذف">🗑</button>
+      </div>
     </div>
   `).join('');
 
@@ -1573,8 +1565,9 @@ function renderCart() {
   const summary = document.getElementById('cartSummary');
   summary.style.display = 'block';
   summary.innerHTML = `
-    ${rests.length > 1 ? `<div style="font-size:12px;color:var(--t3);margin-bottom:8px;padding:8px 12px;background:var(--s2);border-radius:10px">
-      📦 طلب من <b style="color:var(--t1)">${rests.length} مطاعم</b>: ${rests.join(' • ')}
+    ${rests.length > 1 ? `<div style="font-size:12px;color:var(--t3);margin-bottom:10px;padding:8px 12px;background:var(--s2);border-radius:10px;line-height:1.6">
+      📦 طلب من <b style="color:var(--t1)">${rests.length} مطاعم</b><br>
+      <span style="color:var(--brand)">${rests.join(' • ')}</span>
     </div>` : ''}
     <div class="cs-row"><span>المجموع الجزئي</span><span>${sub} ج</span></div>
     <div class="cs-row"><span>رسوم التوصيل</span><span class="${fee===0?'cs-free':''}">${fee===0?'مجاني 🎉':fee+' ج'}</span></div>
