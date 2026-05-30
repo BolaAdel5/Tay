@@ -13,6 +13,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap" rel="stylesheet">
 <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <style>
 /* ══════════════════════════════════════
    DESIGN TOKENS
@@ -1038,6 +1040,27 @@ select.f-input option { background: var(--s2); }
 <!-- Toast -->
 <div class="toast" id="toast"></div>
 
+<!-- Invoice Modal (for search results) -->
+<div id="invModal" style="position:fixed;inset:0;z-index:500;background:rgba(0,0,0,.7);
+  backdrop-filter:blur(5px);display:flex;align-items:flex-end;
+  opacity:0;visibility:hidden;transition:all .3s;font-family:'Cairo',sans-serif;direction:rtl"
+  onclick="if(event.target===this)document.getElementById('invModal').classList.remove('show')">
+  <div style="background:#fff;border-radius:24px 24px 0 0;width:100%;max-height:88vh;
+    overflow-y:auto;transform:translateY(100%);transition:transform .4s cubic-bezier(.34,1.2,.64,1)"
+    id="invModalInner">
+    <div style="width:38px;height:4px;background:#e0e0e0;border-radius:2px;margin:14px auto 0"></div>
+    <div style="padding:20px 20px 10px" id="invModalBody"></div>
+    <div style="display:flex;gap:10px;padding:14px 20px 28px">
+      <button onclick="downloadInvoicePDF()" style="flex:1;padding:13px;border:none;border-radius:12px;
+        background:linear-gradient(135deg,#7C3AED,#9F67F5);color:#fff;
+        font-family:'Cairo',sans-serif;font-size:14px;font-weight:900;cursor:pointer">⬇️ تحميل PDF</button>
+      <button onclick="document.getElementById('invModal').classList.remove('show')"
+        style="padding:13px 20px;border:1.5px solid #eee;border-radius:12px;
+        background:#fff;color:#555;font-family:'Cairo',sans-serif;font-size:14px;font-weight:700;cursor:pointer">إغلاق</button>
+    </div>
+  </div>
+</div>
+
 <script>
 /* ══════════════════════════════════════
    SUPABASE
@@ -1655,6 +1678,8 @@ function segSwitch(el, pane) {
   document.getElementById('seg-' + pane).classList.add('active');
 }
 
+let _srOrder = null; // cached search result for invoice
+
 async function doSearch() {
   const num = document.getElementById('srNum').value.trim();
   if (!num) { toast('⚠️ أدخل رقم الطلب', 'err'); return; }
@@ -1666,28 +1691,233 @@ async function doSearch() {
 
   const res = document.getElementById('srResult');
   if (error || !data) {
+    _srOrder = null;
     res.innerHTML = `<div class="sr-card"><div class="sr-not-found">❌ لم يُعثر على طلب رقم ${num}</div></div>`;
     return;
   }
+
+  _srOrder = data;
+
+  // Parse items
+  let items = [];
+  try { items = data.items ? JSON.parse(data.items) : []; } catch(e) {}
+  const sub      = items.reduce((s,i) => s + i.price * i.qty, 0);
+  const delivery = data.total && sub ? data.total - sub : 15;
+  const grand    = data.total || sub + delivery;
+
   const sm = { 'Pending':['sp-pend','⏳ قيد الانتظار'], 'On The Way':['sp-onwy','🛵 في الطريق'], 'Delivered':['sp-done','✅ تم التسليم'] };
   const [cls, txt] = sm[data.status] || ['sp-pend', data.status];
   const ago = timeAgo(data.created_at);
+
+  // Group items by restaurant
+  const groups = {};
+  items.forEach(i => {
+    const k = i.restName || data.restaurant || 'الطلب';
+    if (!groups[k]) groups[k] = [];
+    groups[k].push(i);
+  });
+
+  const itemsHTML = items.length > 0 ? `
+    <div style="margin:12px 0 8px;font-size:11px;font-weight:800;color:#aaa;text-transform:uppercase;letter-spacing:.8px">الوجبات</div>
+    ${Object.entries(groups).map(([rName, its]) => `
+      ${Object.keys(groups).length > 1 ? `<div style="font-size:12px;font-weight:800;color:#FF6B35;margin:6px 0 4px">🍽️ ${rName}</div>` : ''}
+      ${its.map(i => `
+        <div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;border-bottom:1px dashed #f0f0f0;color:#444">
+          <span>${i.name} × ${i.qty}</span>
+          <span style="font-weight:700;color:#111">${i.price * i.qty} ج</span>
+        </div>`).join('')}
+    `).join('')}
+    <div style="background:#fff8f5;border-radius:10px;padding:10px 12px;margin-top:10px">
+      ${sub > 0 ? `
+        <div style="display:flex;justify-content:space-between;font-size:12px;color:#888;padding:2px 0">
+          <span>الوجبات</span><span>${sub} ج</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:12px;color:#888;padding:2px 0">
+          <span>التوصيل</span><span>${delivery} ج</span>
+        </div>` : ''}
+      <div style="display:flex;justify-content:space-between;font-size:17px;font-weight:900;color:#FF6B35;margin-top:6px;padding-top:6px;border-top:1px solid #fde0d0">
+        <span>الإجمالي</span><span>${grand} ج</span>
+      </div>
+    </div>` : '';
+
   res.innerHTML = `<div class="sr-card">
     <div class="sr-card-top">
-      <div class="sr-order-num">طلب #${data.order_number}</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <div class="sr-order-num">طلب #${data.order_number}</div>
+        <span class="status-pill ${cls}">${txt}</span>
+      </div>
       <div class="sr-name">${data.customer_name}</div>
-      <div class="sr-meta">${data.phone}${data.restaurant?' • '+data.restaurant:''} • ${ago}</div>
-      <div class="sr-status-row"><span class="status-pill ${cls}">${txt}</span></div>
+      <div class="sr-meta">${data.phone}${data.restaurant ? ' • ' + data.restaurant : ''} • ${ago}</div>
+      ${data.order_type ? `<div style="font-size:11px;color:#aaa;margin-top:3px">🚀 ${data.order_type}${data.notes ? ' • 📝 ' + data.notes : ''}</div>` : ''}
+      ${itemsHTML}
     </div>
-    <a class="sr-track-btn" href="track.html?order=${data.order_number}">
-      <span>🗺️ تتبع على الخريطة</span><span>←</span>
-    </a>
+    <div style="display:flex;gap:10px;padding:14px 16px 16px;border-top:1px solid #f0f0f0">
+      <a class="sr-track-btn" href="track.html?order=${data.order_number}" style="flex:1">
+        <span>🗺️ تتبع على الخريطة</span><span>←</span>
+      </a>
+      <button onclick="srOpenInvoice()" style="flex:1;padding:12px;border:1.5px solid #e0e0e0;border-radius:12px;
+        background:#fff;font-family:'Cairo',sans-serif;font-size:13px;font-weight:800;
+        color:#7C3AED;cursor:pointer">🧾 الفاتورة</button>
+    </div>
   </div>`;
+}
+
+function srOpenInvoice() {
+  if (!_srOrder) return;
+  // Reuse track.html invoice logic inline
+  showInvoiceModal(_srOrder);
+}
+
+function showInvoiceModal(order) {
+  let items = [];
+  try { items = order.items ? JSON.parse(order.items) : []; } catch(e) {}
+  const sub      = items.reduce((s,i) => s + i.price * i.qty, 0);
+  const delivery = order.total && sub ? order.total - sub : 15;
+  const grand    = order.total || sub + delivery;
+  const trackUrl = `${location.origin}/track.html?order=${order.order_number}`;
+  const dateStr  = new Date().toLocaleDateString('ar-EG', { year:'numeric', month:'long', day:'numeric' });
+
+  // Build modal HTML
+  const modal = document.getElementById('invModal');
+  const body  = document.getElementById('invModalBody');
+
+  // QR
+  const tmp = document.createElement('div');
+  tmp.style.cssText = 'position:absolute;opacity:0;width:64px;height:64px;top:-999px';
+  document.body.appendChild(tmp);
+  new QRCode(tmp, { text: trackUrl, width: 64, height: 64, correctLevel: QRCode.CorrectLevel.M });
+
+  setTimeout(() => {
+    const canvas = tmp.querySelector('canvas');
+    const qrSrc  = canvas ? canvas.toDataURL() : '';
+    document.body.removeChild(tmp);
+
+    const groups = {};
+    items.forEach(i => { const k = i.restName || order.restaurant || 'الطلب'; if(!groups[k]) groups[k]=[]; groups[k].push(i); });
+
+    body.innerHTML = `
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+        <div>
+          <div style="font-size:22px;font-weight:900;color:#FF6B35">🛵 طيّار</div>
+          <div style="font-size:11px;color:#aaa;margin-top:1px">توصيل سريع • في أي مكان</div>
+        </div>
+        ${qrSrc ? `<div style="border:1px solid #eee;border-radius:8px;padding:3px;background:#fff"><img src="${qrSrc}" width="60" height="60"></div>` : ''}
+      </div>
+      <div style="height:1px;background:#f0f0f0;margin:10px 0"></div>
+      <div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0;color:#555"><span>رقم الطلب</span><b style="color:#111">#${order.order_number}</b></div>
+      <div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0;color:#555"><span>التاريخ</span><b style="color:#111">${dateStr}</b></div>
+      <div style="height:1px;background:#f0f0f0;margin:10px 0"></div>
+      <div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0;color:#555"><span>العميل</span><b style="color:#111">${order.customer_name}</b></div>
+      <div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0;color:#555"><span>الهاتف</span><b style="color:#111">${order.phone}</b></div>
+      ${order.restaurant ? `<div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0;color:#555"><span>المطعم</span><b style="color:#111">${order.restaurant}</b></div>` : ''}
+      ${items.length > 0 ? `
+        <div style="font-size:10px;font-weight:800;color:#bbb;text-transform:uppercase;letter-spacing:.8px;margin:12px 0 8px">الوجبات</div>
+        ${Object.entries(groups).map(([rn, its]) => `
+          ${Object.keys(groups).length > 1 ? `<div style="font-size:11px;font-weight:800;color:#FF6B35;margin:6px 0 4px">🍽️ ${rn}</div>` : ''}
+          ${its.map(i => `<div style="display:flex;justify-content:space-between;font-size:13px;padding:5px 0;border-bottom:1px dashed #f5f5f5">
+            <span style="color:#333">${i.name}</span>
+            <span style="color:#aaa;margin:0 8px">× ${i.qty}</span>
+            <span style="font-weight:700;color:#111">${i.price * i.qty} ج</span>
+          </div>`).join('')}
+        `).join('')}
+      ` : ''}
+      <div style="background:#fff8f5;border-radius:12px;padding:12px 14px;margin-top:14px">
+        ${sub > 0 ? `
+          <div style="display:flex;justify-content:space-between;font-size:12px;color:#999;padding:2px 0"><span>الوجبات</span><span>${sub} ج</span></div>
+          <div style="display:flex;justify-content:space-between;font-size:12px;color:#999;padding:2px 0"><span>التوصيل</span><span>${delivery} ج</span></div>` : ''}
+        <div style="display:flex;justify-content:space-between;font-size:19px;font-weight:900;color:#FF6B35;margin-top:8px;padding-top:8px;border-top:1px solid #fde0d0">
+          <span>الإجمالي</span><span>${grand} ج</span>
+        </div>
+      </div>
+      <div style="text-align:center;font-size:11px;color:#ccc;margin-top:14px;line-height:1.7">
+        امسح الباركود لتتبع طلبك<br>شكراً لاختيارك طيّار ❤️
+      </div>`;
+
+    // Store for PDF download
+    modal.dataset.orderId = order.order_number;
+    window._invOrderForPDF = order;
+    modal.classList.add('show');
+  }, 350);
 }
 
 /* ══════════════════════════════════════
    UTILS
 ══════════════════════════════════════ */
+// Invoice modal show state via CSS class
+document.getElementById('invModal').addEventListener('transitionend', () => {});
+const _invModalStyle = document.createElement('style');
+_invModalStyle.textContent = `
+  #invModal.show { opacity:1 !important; visibility:visible !important; }
+  #invModal.show #invModalInner { transform:translateY(0) !important; }
+`;
+document.head.appendChild(_invModalStyle);
+
+function downloadInvoicePDF() {
+  const order = window._invOrderForPDF;
+  if (!order) return;
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation:'p', unit:'mm', format:[80,200] });
+  const W = 80; let y = 10;
+  let items = [];
+  try { items = order.items ? JSON.parse(order.items) : []; } catch(e) {}
+  const sub = items.reduce((s,i) => s + i.price * i.qty, 0);
+  const delivery = order.total && sub ? order.total - sub : 15;
+  const grand = order.total || sub + delivery;
+
+  const L = (t,x,yy,sz=9,bold=false,align='right') => {
+    doc.setFontSize(sz); doc.setFont('helvetica', bold?'bold':'normal');
+    doc.text(String(t), x, yy, {align});
+  };
+  const sep = yy => { doc.setDrawColor(220); doc.line(5,yy,W-5,yy); };
+
+  doc.setFillColor(255,107,53); doc.rect(0,0,W,18,'F');
+  doc.setTextColor(255,255,255);
+  L('Tayar Delivery', W/2, 8, 13, true, 'center');
+  L('Invoice', W/2, 14, 8, false, 'center');
+  doc.setTextColor(30,30,30); y = 24;
+
+  L(`Order #${order.order_number}`, W-5, y, 10, true, 'right'); y+=6;
+  L(new Date().toLocaleDateString('en-GB'), W-5, y, 8, false, 'right'); y+=3;
+  sep(y); y+=5;
+  L('Customer:', 5, y, 8, true, 'left'); L(order.customer_name, W-5, y, 8, false, 'right'); y+=5;
+  L('Phone:', 5, y, 8, true, 'left'); L(order.phone, W-5, y, 8, false, 'right'); y+=5;
+  if (order.restaurant) { L('Restaurant:', 5, y, 8, true, 'left'); L(order.restaurant, W-5, y, 8, false, 'right'); y+=5; }
+  sep(y); y+=5;
+
+  if (items.length > 0) {
+    L('ITEMS', W/2, y, 8, true, 'center'); y+=5;
+    items.forEach(i => {
+      L(i.name, 5, y, 8, false, 'left');
+      L(`x${i.qty}  ${i.price*i.qty} EGP`, W-5, y, 8, false, 'right'); y+=5;
+    });
+    sep(y); y+=5;
+  }
+  if (sub > 0) {
+    L('Subtotal:', 5, y, 8, false, 'left'); L(`${sub} EGP`, W-5, y, 8, false, 'right'); y+=5;
+    L('Delivery:', 5, y, 8, false, 'left'); L(`${delivery} EGP`, W-5, y, 8, false, 'right'); y+=5;
+    sep(y); y+=5;
+  }
+  doc.setFillColor(255,248,240); doc.rect(5,y-3,W-10,10,'F');
+  doc.setTextColor(255,107,53);
+  L('TOTAL:', 5, y+4, 11, true, 'left'); L(`${grand} EGP`, W-5, y+4, 11, true, 'right');
+  doc.setTextColor(30,30,30); y+=14;
+
+  // QR
+  const tmp2 = document.createElement('div');
+  tmp2.style.cssText='position:absolute;opacity:0;width:60px;height:60px;top:-999px';
+  document.body.appendChild(tmp2);
+  const trackUrl = `${location.origin}/track.html?order=${order.order_number}`;
+  new QRCode(tmp2,{text:trackUrl,width:60,height:60,correctLevel:QRCode.CorrectLevel.M});
+  setTimeout(()=>{
+    const cv=tmp2.querySelector('canvas');
+    if(cv){ doc.addImage(cv.toDataURL(),'PNG',(W-30)/2,y,30,30); y+=33; }
+    document.body.removeChild(tmp2);
+    sep(y); y+=5;
+    doc.setTextColor(150);
+    L('Scan QR to track • Thank you!', W/2, y, 7, false, 'center');
+    doc.save(`tayar-invoice-${order.order_number}.pdf`);
+  },400);
+}
 function timeAgo(ts) {
   if (!ts) return '';
   const d = (Date.now() - new Date(ts)) / 1000;

@@ -396,9 +396,12 @@ async function poll() {
   if (error || !data) return;
 
   document.getElementById('loadingOv').classList.add('gone');
-  _cachedOrder = data; // cache for invoice
+  _cachedOrder = data;
 
   const cfg = statusCfg[data.status] || statusCfg['Pending'];
+
+  // Always show invoice button once order is loaded
+  document.getElementById('invBtn').classList.add('inv-btn-visible');
 
   // Status change notification
   if (prevStatus && prevStatus !== data.status) { vibrate(); beep(); if(cfg.toast) toast(cfg.toast); }
@@ -464,12 +467,6 @@ async function poll() {
       celebShown=true; vibrate(); beep();
       setTimeout(()=>document.getElementById('celebWrap').classList.add('show'),700);
     }
-    // Show invoice button
-    const invBtn = document.getElementById('invBtn');
-    invBtn.style.display = 'flex';
-    invBtn.style.removeProperty('display');
-    invBtn.removeAttribute('style');
-    invBtn.classList.add('inv-btn-visible');
   }
 
   // Show restaurant name next to order number (first time only)
