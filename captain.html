@@ -1,0 +1,1092 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>طيّار — لوحة الكابتن</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;600;700;900&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<style>
+  :root {
+    --gold: #C9A84C;
+    --gold-light: #E8C96A;
+    --gold-dim: rgba(201,168,76,0.12);
+    --bg: #0A0A0A;
+    --surface: #111111;
+    --surface2: #1A1A1A;
+    --surface3: #222222;
+    --border: rgba(201,168,76,0.18);
+    --border-subtle: rgba(255,255,255,0.06);
+    --text: #F0EDE8;
+    --text-muted: #666;
+    --pending-color: #E8A24C;
+    --onway-color: #4C8FE8;
+    --done-color: #4CAF7D;
+    --radius: 16px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Cairo', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    direction: rtl;
+  }
+
+  /* ── LOGIN SCREEN ── */
+  .login-screen {
+    position: fixed;
+    inset: 0;
+    z-index: 999;
+    background: var(--bg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    transition: opacity 0.4s, visibility 0.4s;
+  }
+  .login-screen.hidden { opacity: 0; visibility: hidden; pointer-events: none; }
+
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background:
+      radial-gradient(ellipse 60% 50% at 20% 80%, rgba(201,168,76,0.07) 0%, transparent 70%),
+      radial-gradient(ellipse 40% 40% at 80% 20%, rgba(201,168,76,0.05) 0%, transparent 60%);
+    pointer-events: none; z-index: 0;
+  }
+
+  .login-box {
+    width: 100%;
+    max-width: 380px;
+    text-align: center;
+    animation: fadeUp 0.6s ease both;
+  }
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(20px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .login-icon {
+    width: 72px; height: 72px;
+    background: linear-gradient(135deg, var(--gold), var(--gold-light));
+    border-radius: 24px;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 34px;
+    margin-bottom: 16px;
+    box-shadow: 0 8px 32px rgba(201,168,76,0.35);
+  }
+  .login-title { font-size: 26px; font-weight: 900; color: var(--gold); letter-spacing: 1px; }
+  .login-sub   { font-size: 13px; color: var(--text-muted); margin-top: 4px; margin-bottom: 32px; }
+
+  .login-field {
+    position: relative;
+    margin-bottom: 16px;
+  }
+  .login-field input {
+    width: 100%;
+    padding: 15px 46px 15px 16px;
+    background: #1A1A1A;
+    border: 1.5px solid transparent;
+    border-radius: 14px;
+    color: var(--text);
+    font-family: 'Cairo', sans-serif;
+    font-size: 15px;
+    outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+  .login-field input:focus {
+    border-color: var(--gold);
+    box-shadow: 0 0 0 3px rgba(201,168,76,0.12);
+  }
+  .login-field .field-icon {
+    position: absolute;
+    right: 16px; top: 50%;
+    transform: translateY(-50%);
+    font-size: 16px; opacity: 0.45;
+  }
+  .login-field input::placeholder { color: #444; }
+
+  .login-btn {
+    width: 100%;
+    padding: 15px;
+    background: linear-gradient(135deg, var(--gold), var(--gold-light));
+    border: none;
+    border-radius: 14px;
+    color: #0A0A0A;
+    font-family: 'Cairo', sans-serif;
+    font-size: 16px;
+    font-weight: 800;
+    cursor: pointer;
+    margin-top: 8px;
+    transition: transform 0.15s, box-shadow 0.2s;
+  }
+  .login-btn:hover { transform: translateY(-2px); box-shadow: 0 10px 28px rgba(201,168,76,0.4); }
+  .login-btn:active { transform: translateY(0); }
+
+  .login-error {
+    font-size: 13px;
+    color: #E05C5C;
+    margin-top: 12px;
+    font-weight: 600;
+    min-height: 20px;
+    transition: opacity 0.2s;
+  }
+
+  .login-hint {
+    margin-top: 20px;
+    font-size: 11px;
+    color: #333;
+  }
+
+  /* Header */
+  .header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 20px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    backdrop-filter: blur(10px);
+  }
+
+  .header-brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .header-icon {
+    width: 40px;
+    height: 40px;
+    background: linear-gradient(135deg, var(--gold), var(--gold-light));
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+  }
+
+  .header-titles h1 {
+    font-size: 18px;
+    font-weight: 900;
+    color: var(--gold);
+    letter-spacing: 1px;
+    line-height: 1;
+  }
+
+  .header-titles p {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 2px;
+  }
+
+  .live-badge {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(76,175,125,0.1);
+    border: 1px solid rgba(76,175,125,0.3);
+    color: var(--done-color);
+    padding: 6px 14px;
+    border-radius: 50px;
+    font-size: 12px;
+    font-weight: 700;
+  }
+
+  .live-dot {
+    width: 7px;
+    height: 7px;
+    background: var(--done-color);
+    border-radius: 50%;
+    animation: blink 1.5s ease-in-out infinite;
+  }
+
+  @keyframes blink {
+    0%, 100% { opacity: 0.4; }
+    50%       { opacity: 1; }
+  }
+
+  /* Stats bar */
+  .stats-bar {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    padding: 20px 20px 0;
+    animation: fadeDown 0.5s ease both;
+  }
+
+  @keyframes fadeDown {
+    from { opacity: 0; transform: translateY(-10px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .stat-card {
+    background: var(--surface);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius);
+    padding: 16px 14px;
+    text-align: center;
+  }
+
+  .stat-num {
+    font-size: 26px;
+    font-weight: 900;
+    color: var(--gold);
+    line-height: 1;
+  }
+
+  .stat-label {
+    font-size: 10px;
+    color: var(--text-muted);
+    margin-top: 4px;
+    font-weight: 600;
+  }
+
+  /* Section header */
+  .section-header {
+    padding: 24px 20px 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .section-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+
+  /* Order card */
+  .orders-list {
+    padding: 0 20px 100px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .order-card {
+    background: var(--surface);
+    border: 1px solid var(--border-subtle);
+    border-radius: 20px;
+    overflow: hidden;
+    transition: border-color 0.25s, transform 0.2s;
+    animation: cardIn 0.4s ease both;
+  }
+
+  @keyframes cardIn {
+    from { opacity: 0; transform: translateY(12px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .order-card:hover {
+    border-color: var(--border);
+    transform: translateY(-2px);
+  }
+
+  .order-card.active-delivery {
+    border-color: rgba(76,143,232,0.4);
+    box-shadow: 0 0 20px rgba(76,143,232,0.1);
+  }
+
+  .order-card.delivered {
+    opacity: 0.55;
+  }
+
+  .card-top {
+    padding: 18px 18px 14px;
+    border-bottom: 1px solid var(--border-subtle);
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .order-info {}
+
+  .order-num {
+    font-size: 11px;
+    color: var(--text-muted);
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    margin-bottom: 4px;
+  }
+
+  .customer-name {
+    font-size: 17px;
+    font-weight: 800;
+    color: var(--text);
+    line-height: 1.2;
+  }
+
+  .customer-phone {
+    font-size: 13px;
+    color: var(--text-muted);
+    margin-top: 3px;
+    direction: ltr;
+    text-align: right;
+  }
+
+  /* Status pill */
+  .status-pill {
+    padding: 5px 12px;
+    border-radius: 50px;
+    font-size: 11px;
+    font-weight: 800;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .pill-pending  { background: rgba(232,162,76,0.15); color: var(--pending-color); border: 1px solid rgba(232,162,76,0.3); }
+  .pill-onway    { background: rgba(76,143,232,0.15); color: var(--onway-color);   border: 1px solid rgba(76,143,232,0.3); }
+  .pill-done     { background: rgba(76,175,125,0.15); color: var(--done-color);     border: 1px solid rgba(76,175,125,0.3); }
+
+  /* Action buttons */
+  .card-actions {
+    padding: 12px 18px 14px;
+    display: flex;
+    gap: 10px;
+  }
+
+  .btn {
+    flex: 1;
+    padding: 12px 8px;
+    border: none;
+    border-radius: 12px;
+    font-family: 'Cairo', sans-serif;
+    font-size: 13px;
+    font-weight: 800;
+    cursor: pointer;
+    transition: transform 0.15s, box-shadow 0.2s, opacity 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+  }
+
+  .btn:hover { transform: translateY(-1px); }
+  .btn:active { transform: translateY(0); }
+  .btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none !important; }
+
+  .btn-start {
+    background: linear-gradient(135deg, #2563EB, #3B82F6);
+    color: white;
+    box-shadow: 0 4px 16px rgba(37,99,235,0.3);
+  }
+
+  .btn-start:hover:not(:disabled) { box-shadow: 0 6px 20px rgba(37,99,235,0.45); }
+
+  .btn-done {
+    background: linear-gradient(135deg, #16A34A, #22C55E);
+    color: white;
+    box-shadow: 0 4px 16px rgba(22,163,74,0.3);
+  }
+
+  .btn-done:hover:not(:disabled) { box-shadow: 0 6px 20px rgba(22,163,74,0.45); }
+
+  /* Empty state */
+  .empty-state {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--text-muted);
+  }
+
+  .empty-state .empty-icon {
+    font-size: 48px;
+    margin-bottom: 14px;
+    opacity: 0.5;
+  }
+
+  .empty-state p {
+    font-size: 15px;
+    font-weight: 600;
+  }
+
+  /* Items list inside card */
+  .card-items {
+    padding: 12px 18px;
+    border-bottom: 1px solid var(--border-subtle);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .card-items-title {
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    margin-bottom: 4px;
+  }
+
+  .item-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .item-row-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+    flex: 1;
+  }
+
+  .item-row-qty {
+    font-size: 11px;
+    font-weight: 800;
+    color: var(--text-muted);
+    background: rgba(255,255,255,.06);
+    padding: 2px 8px;
+    border-radius: 20px;
+    flex-shrink: 0;
+  }
+
+  .item-row-price {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--gold);
+    flex-shrink: 0;
+    min-width: 48px;
+    text-align: left;
+  }
+
+  /* Total bar */
+  .card-total {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 18px;
+    background: rgba(201,168,76,.06);
+    border-bottom: 1px solid var(--border-subtle);
+  }
+
+  .card-total-label {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text-muted);
+  }
+
+  .card-total-rows {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 2px;
+  }
+
+  .card-total-sub {
+    font-size: 11px;
+    color: var(--text-muted);
+    font-weight: 600;
+  }
+
+  .card-total-grand {
+    font-size: 18px;
+    font-weight: 900;
+    color: var(--gold);
+  }
+
+  .btn-invoice {
+    background: linear-gradient(135deg, #7C3AED, #9F67F5);
+    color: white;
+    box-shadow: 0 4px 16px rgba(124,58,237,0.3);
+    flex: 0 0 auto;
+    padding: 12px 14px;
+    font-size: 13px;
+  }
+  .btn-invoice:hover:not(:disabled) { box-shadow: 0 6px 20px rgba(124,58,237,0.45); }
+
+  /* Invoice modal */
+  .inv-modal-bg {
+    position: fixed; inset: 0; z-index: 900;
+    background: rgba(0,0,0,.75); backdrop-filter: blur(6px);
+    display: flex; align-items: center; justify-content: center; padding: 20px;
+    opacity: 0; visibility: hidden; transition: all .3s;
+  }
+  .inv-modal-bg.show { opacity: 1; visibility: visible; }
+  .inv-modal {
+    background: #fff; border-radius: 24px; width: 100%; max-width: 360px;
+    overflow: hidden; transform: scale(.88);
+    transition: transform .4s cubic-bezier(.34,1.2,.64,1);
+    box-shadow: 0 24px 60px rgba(0,0,0,.4);
+  }
+  .inv-modal-bg.show .inv-modal { transform: scale(1); }
+
+  /* Invoice preview inside modal */
+  .inv-preview {
+    background: #fff; padding: 28px 24px 20px; color: #111;
+    font-family: 'Cairo', sans-serif; direction: rtl;
+  }
+  .inv-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+  .inv-brand { font-size: 26px; font-weight: 900; color: #FF6B35; letter-spacing: 1px; }
+  .inv-brand-sub { font-size: 11px; color: #999; margin-top: 1px; }
+  .inv-qr { width: 72px; height: 72px; }
+  .inv-divider { height: 1px; background: #eee; margin: 12px 0; }
+  .inv-row { display: flex; justify-content: space-between; font-size: 13px; padding: 3px 0; color: #555; }
+  .inv-row b { color: #111; font-weight: 800; }
+  .inv-items-title { font-size: 11px; font-weight: 700; color: #aaa; text-transform: uppercase; letter-spacing: .8px; margin: 14px 0 8px; }
+  .inv-item { display: flex; justify-content: space-between; font-size: 13px; padding: 5px 0; border-bottom: 1px dashed #f0f0f0; }
+  .inv-item-name { color: #333; flex: 1; }
+  .inv-item-qty { color: #999; margin: 0 12px; font-size: 12px; }
+  .inv-item-price { color: #111; font-weight: 700; }
+  .inv-total-box { background: #fff8f0; border-radius: 12px; padding: 12px 16px; margin-top: 14px; }
+  .inv-total-row { display: flex; justify-content: space-between; font-size: 12px; color: #888; padding: 2px 0; }
+  .inv-grand { display: flex; justify-content: space-between; font-size: 18px; font-weight: 900; color: #FF6B35; margin-top: 8px; padding-top: 8px; border-top: 1px solid #fde8d8; }
+  .inv-footer { text-align: center; font-size: 11px; color: #bbb; margin-top: 16px; }
+
+  .inv-actions { display: flex; gap: 10px; padding: 16px 20px 20px; background: #fff; border-top: 1px solid #f0f0f0; }
+  .inv-dl-btn { flex: 1; padding: 13px; border: none; border-radius: 12px; font-family: 'Cairo', sans-serif; font-size: 14px; font-weight: 900; cursor: pointer; }
+  .inv-dl-pdf { background: linear-gradient(135deg,#7C3AED,#9F67F5); color: #fff; }
+  .inv-dl-close { background: #f5f5f5; color: #555; }
+    background: var(--surface2);
+    border-radius: 20px;
+    height: 140px;
+    animation: shimmer 1.5s ease-in-out infinite;
+  }
+
+  @keyframes shimmer {
+    0%, 100% { opacity: 0.6; }
+    50%       { opacity: 1; }
+  }
+
+  /* Notification toast */
+  .toast {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%) translateY(100px);
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 12px 22px;
+    border-radius: 50px;
+    font-size: 14px;
+    font-weight: 700;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.6);
+    transition: transform 0.4s cubic-bezier(0.34,1.56,0.64,1);
+    z-index: 999;
+    white-space: nowrap;
+  }
+
+  .toast.show { transform: translateX(-50%) translateY(0); }
+  .toast.success { border-color: var(--done-color); color: var(--done-color); }
+  .toast.info    { border-color: var(--onway-color); color: var(--onway-color); }
+</style>
+</head>
+<body>
+
+<!-- LOGIN SCREEN -->
+<div class="login-screen" id="loginScreen">
+  <div class="login-box">
+    <div class="login-icon">🛵</div>
+    <div class="login-title">طيّار</div>
+    <div class="login-sub">لوحة تحكم الكابتن — للمفوضين فقط</div>
+    <div class="login-field">
+      <input type="text"    id="loginUser" placeholder="اسم المستخدم" autocomplete="username">
+      <span class="field-icon">👤</span>
+    </div>
+    <div class="login-field">
+      <input type="password" id="loginPass" placeholder="كلمة المرور"  autocomplete="current-password"
+             onkeydown="if(event.key==='Enter') doLogin()">
+      <span class="field-icon">🔒</span>
+    </div>
+    <button class="login-btn" onclick="doLogin()">دخول</button>
+    <div class="login-error" id="loginError"></div>
+    <div class="login-hint">💡 تجربة: captain / 1234</div>
+  </div>
+</div>
+
+<!-- INVOICE MODAL -->
+<div class="inv-modal-bg" id="invModalBg" onclick="if(event.target===this)closeInvoice()">
+  <div class="inv-modal">
+    <div class="inv-preview" id="invPreview"><!-- filled by JS --></div>
+    <div class="inv-actions">
+      <button class="inv-dl-btn inv-dl-pdf" onclick="downloadInvoicePDF()">⬇️ تحميل PDF</button>
+      <button class="inv-dl-btn inv-dl-close" onclick="closeInvoice()">إغلاق</button>
+    </div>
+  </div>
+</div>
+
+<div class="header">
+  <div class="header-brand">
+    <div class="header-icon">🛵</div>
+    <div class="header-titles">
+      <h1>طيّار</h1>
+      <p>لوحة تحكم الكابتن</p>
+    </div>
+  </div>
+  <div style="display:flex;align-items:center;gap:8px">
+    <div class="live-badge">
+      <div class="live-dot"></div>
+      مباشر
+    </div>
+    <button onclick="doLogout()" style="background:rgba(224,92,92,.12);border:1px solid rgba(224,92,92,.25);
+      color:var(--text-muted);font-size:11px;font-weight:700;padding:5px 10px;border-radius:8px;cursor:pointer;
+      font-family:'Cairo',sans-serif">خروج</button>
+  </div>
+</div>
+
+<!-- Stats -->
+<div class="stats-bar">
+  <div class="stat-card">
+    <div class="stat-num" id="statTotal">—</div>
+    <div class="stat-label">إجمالي الطلبات</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-num" id="statPending" style="color: var(--pending-color)">—</div>
+    <div class="stat-label">قيد الانتظار</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-num" id="statDone" style="color: var(--done-color)">—</div>
+    <div class="stat-label">مكتملة</div>
+  </div>
+</div>
+
+<div class="section-header">
+  <span class="section-title">الطلبات</span>
+</div>
+
+<div class="orders-list" id="orders">
+  <div class="skeleton"></div>
+  <div class="skeleton" style="opacity:0.5"></div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ── LOGIN ──
+const CAPTAIN_CREDS = { captain: '1234', admin: 'tayar2025' };
+
+function doLogout() {
+  sessionStorage.removeItem('tayar_auth');
+  document.getElementById('loginScreen').classList.remove('hidden');
+  document.getElementById('loginUser').value = '';
+  document.getElementById('loginPass').value = '';
+}
+
+function doLogin() {
+  const u = document.getElementById('loginUser').value.trim();
+  const p = document.getElementById('loginPass').value;
+  const errEl = document.getElementById('loginError');
+  if (CAPTAIN_CREDS[u] && CAPTAIN_CREDS[u] === p) {
+    sessionStorage.setItem('tayar_auth', u);
+    document.getElementById('loginScreen').classList.add('hidden');
+    errEl.textContent = '';
+    loadOrders();
+  } else {
+    errEl.textContent = '❌ اسم المستخدم أو كلمة المرور غير صحيحة';
+  }
+}
+
+// Check session on load
+window.addEventListener('DOMContentLoaded', () => {
+  if (sessionStorage.getItem('tayar_auth')) {
+    document.getElementById('loginScreen').classList.add('hidden');
+    loadOrders();
+  }
+});
+
+const SUPABASE_URL = 'https://ckxljrwcsjmdflxyxxoc.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNreGxqcndjc2ptZGZseHl4eG9jIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk4NzcwODYsImV4cCI6MjA5NTQ1MzA4Nn0.tMouJB-NI12ev-TX9AX41CQzOCLQ4wR3xh6I2GTqxe0';
+const client = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+let watchId = null;
+let activeDeliveryId = null;
+
+function showToast(msg, type = '') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast show ' + type;
+  setTimeout(() => { t.className = 'toast'; }, 3000);
+}
+
+function statusPill(status) {
+  const map = {
+    'Pending':    ['قيد الانتظار', 'pill-pending'],
+    'On The Way': ['في الطريق',    'pill-onway'],
+    'Delivered':  ['تم التسليم',   'pill-done'],
+  };
+  const [label, cls] = map[status] || [status, 'pill-pending'];
+  return `<span class="status-pill ${cls}">${label}</span>`;
+}
+
+function cardClass(status) {
+  if (status === 'On The Way') return 'order-card active-delivery';
+  if (status === 'Delivered')  return 'order-card delivered';
+  return 'order-card';
+}
+
+let _lastSnapshot = '';
+async function loadOrders() {
+  const { data, error } = await client
+    .from('orders').select('*').order('id', { ascending: false });
+
+  if (error || !data) return;
+  
+  // Skip re-render if nothing changed (avoids flicker every 3s)
+  const snapshot = JSON.stringify(data.map(o => ({ id: o.id, status: o.status, driver_lat: o.driver_lat })));
+  if (snapshot === _lastSnapshot) return;
+  _lastSnapshot = snapshot;
+
+  // Stats
+  document.getElementById('statTotal').textContent   = data.length;
+  document.getElementById('statPending').textContent = data.filter(o => o.status === 'Pending').length;
+  document.getElementById('statDone').textContent    = data.filter(o => o.status === 'Delivered').length;
+
+  const container = document.getElementById('orders');
+  container.innerHTML = '';
+
+  if (data.length === 0) {
+    container.innerHTML = `
+      <div class="empty-state">
+        <div class="empty-icon">📭</div>
+        <p>لا توجد طلبات حالياً</p>
+        <p style="font-size:12px;color:#555;margin-top:4px">يتحدث تلقائياً كل 3 ثوانٍ</p>
+      </div>`;
+    return;
+  }
+
+  data.forEach((order, i) => {
+    const startDisabled = (order.status === 'On The Way' || order.status === 'Delivered') ? 'disabled' : '';
+    const doneDisabled  = order.status === 'Delivered' ? 'disabled' : '';
+
+    const el = document.createElement('div');
+    el.className = cardClass(order.status);
+    el.style.animationDelay = (i * 0.06) + 's';
+    // Parse items JSON safely
+    let itemsArr = [];
+    try { itemsArr = order.items ? JSON.parse(order.items) : []; } catch(e) {}
+
+    // Calculate subtotal from items
+    const itemsSubtotal = itemsArr.reduce((s, it) => s + (it.price * it.qty), 0);
+    const deliveryFee   = order.total && itemsSubtotal ? order.total - itemsSubtotal : 15;
+    const grandTotal    = order.total || itemsSubtotal + deliveryFee;
+
+    // Items HTML
+    const itemsHTML = itemsArr.length > 0 ? `
+      <div class="card-items">
+        <div class="card-items-title">🧾 تفاصيل الطلب</div>
+        ${itemsArr.map(it => `
+          <div class="item-row">
+            <span class="item-row-name">${it.name}</span>
+            <span class="item-row-qty">× ${it.qty}</span>
+            <span class="item-row-price">${it.price * it.qty} ج</span>
+          </div>
+        `).join('')}
+      </div>
+      <div class="card-total">
+        <div class="card-total-label">💰 الإجمالي</div>
+        <div class="card-total-rows">
+          ${itemsSubtotal > 0 ? `<div class="card-total-sub">الوجبات: ${itemsSubtotal} ج + توصيل: ${deliveryFee} ج</div>` : ''}
+          <div class="card-total-grand">${grandTotal} ج</div>
+        </div>
+      </div>` : (order.total ? `
+      <div class="card-total">
+        <div class="card-total-label">💰 إجمالي الطلب</div>
+        <div class="card-total-grand">${order.total} ج</div>
+      </div>` : '');
+
+    el.innerHTML = `
+      <div class="card-top">
+        <div class="order-info">
+          <div class="order-num">طلب #${order.order_number}${order.restaurant ? ' • <span style="color:var(--gold)">' + order.restaurant + '</span>' : ''}</div>
+          <div class="customer-name">${order.customer_name}</div>
+          <div style="display:flex;align-items:center;gap:8px;margin-top:4px;flex-wrap:wrap">
+            <div class="customer-phone">${order.phone}</div>
+            <a href="tel:${order.phone}" onclick="event.stopPropagation()"
+               style="background:rgba(76,175,125,.15);color:var(--done-color);border:1px solid rgba(76,175,125,.3);
+               padding:2px 10px;border-radius:20px;font-size:11px;font-weight:800;text-decoration:none">📞 اتصال</a>
+          </div>
+          ${order.order_type ? `<div style="font-size:11px;color:var(--text-muted);margin-top:4px">🚀 ${order.order_type}</div>` : ''}
+          ${order.notes ? `<div style="font-size:11px;color:var(--text-muted);margin-top:5px;padding:6px 10px;background:rgba(255,255,255,.04);border-radius:8px;border:1px solid rgba(255,255,255,.06)">📝 ${order.notes}</div>` : ''}
+        </div>
+        ${statusPill(order.status)}
+      </div>
+      ${itemsHTML}
+      <div class="card-actions">
+        <button class="btn btn-start" onclick="startDelivery(${order.id})" ${startDisabled}>
+          🛵 جاري التوصيل
+        </button>
+        <button class="btn btn-done" onclick="markDelivered(${order.id})" ${doneDisabled}>
+          ✅ تم التسليم
+        </button>
+        <button class="btn btn-invoice" onclick="openInvoice(${order.id})">
+          🧾
+        </button>
+      </div>`;
+    container.appendChild(el);
+  });
+}
+
+window.startDelivery = async function(id) {
+  if (activeDeliveryId && activeDeliveryId !== id) {
+    showToast('⚠️ أنهِ التوصيل الحالي أولاً', 'info');
+    return;
+  }
+
+  await client.from('orders').update({ status: 'On The Way' }).eq('id', id);
+  activeDeliveryId = id;
+
+  if (watchId) navigator.geolocation.clearWatch(watchId);
+
+  watchId = navigator.geolocation.watchPosition(
+    async (pos) => {
+      await client.from('orders').update({
+        driver_lat: pos.coords.latitude,
+        driver_lng: pos.coords.longitude
+      }).eq('id', id);
+    },
+    (err) => { console.warn(err); },
+    { enableHighAccuracy: true }
+  );
+
+  showToast('🛵 بدأ التتبع المباشر', 'info');
+  loadOrders();
+};
+
+window.markDelivered = async function(id) {
+  if (!confirm('تأكيد: هل تم التسليم فعلاً؟')) return;
+  if (watchId) {
+    navigator.geolocation.clearWatch(watchId);
+    watchId = null;
+  }
+  activeDeliveryId = null;
+
+  await client.from('orders').update({ status: 'Delivered' }).eq('id', id);
+  showToast('✅ تم التسليم بنجاح!', 'success');
+  loadOrders();
+};
+
+/* ═══════════════════════════════════════
+   INVOICE
+═══════════════════════════════════════ */
+let _allOrders = [];
+let _currentInvoiceOrder = null;
+
+// Store orders after load for invoice lookup
+const _origLoad = loadOrders;
+
+// Override to cache orders
+async function loadOrdersAndCache() {
+  const { data } = await client.from('orders').select('*').order('id', { ascending: false });
+  if (data) _allOrders = data;
+}
+// Merge into existing loadOrders call
+const _baseLoadOrders = loadOrders;
+
+window.openInvoice = function(id) {
+  const order = _allOrders.find(o => o.id === id);
+  if (!order) { showToast('⚠️ حدث خطأ، حاول مجدداً', ''); return; }
+  _currentInvoiceOrder = order;
+
+  let itemsArr = [];
+  try { itemsArr = order.items ? JSON.parse(order.items) : []; } catch(e) {}
+  const sub      = itemsArr.reduce((s, it) => s + it.price * it.qty, 0);
+  const delivery = order.total && sub ? order.total - sub : 15;
+  const grand    = order.total || sub + delivery;
+  const now      = new Date();
+  const dateStr  = now.toLocaleDateString('ar-EG', { year:'numeric', month:'long', day:'numeric' });
+  const timeStr  = now.toLocaleTimeString('ar-EG', { hour:'2-digit', minute:'2-digit' });
+  const trackUrl = `${location.origin}/track.html?order=${order.order_number}`;
+
+  // Build QR then render preview
+  const qrDiv = document.createElement('div');
+  qrDiv.style.cssText = 'width:72px;height:72px;position:absolute;opacity:0;pointer-events:none';
+  document.body.appendChild(qrDiv);
+
+  new QRCode(qrDiv, {
+    text: trackUrl,
+    width: 72, height: 72,
+    colorDark: '#111', colorLight: '#fff',
+    correctLevel: QRCode.CorrectLevel.M
+  });
+
+  setTimeout(() => {
+    const qrImg = qrDiv.querySelector('img') || qrDiv.querySelector('canvas');
+    const qrSrc = qrImg ? (qrImg.tagName === 'IMG' ? qrImg.src : qrImg.toDataURL()) : '';
+    document.body.removeChild(qrDiv);
+
+    const statusLabels = { Pending:'قيد الانتظار', 'On The Way':'في الطريق', Delivered:'تم التسليم' };
+
+    document.getElementById('invPreview').innerHTML = `
+      <div class="inv-header">
+        <div>
+          <div class="inv-brand">🛵 طيّار</div>
+          <div class="inv-brand-sub">توصيل سريع • في أي مكان</div>
+        </div>
+        ${qrSrc ? `<img class="inv-qr" src="${qrSrc}" alt="QR">` : ''}
+      </div>
+
+      <div class="inv-divider"></div>
+
+      <div class="inv-row"><span>رقم الفاتورة</span><b>#${order.order_number}</b></div>
+      <div class="inv-row"><span>التاريخ</span><b>${dateStr} • ${timeStr}</b></div>
+      <div class="inv-row"><span>الحالة</span><b>${statusLabels[order.status] || order.status}</b></div>
+
+      <div class="inv-divider"></div>
+
+      <div class="inv-row"><span>العميل</span><b>${order.customer_name}</b></div>
+      <div class="inv-row"><span>الهاتف</span><b>${order.phone}</b></div>
+      ${order.restaurant ? `<div class="inv-row"><span>المطعم</span><b>${order.restaurant}</b></div>` : ''}
+      ${order.order_type ? `<div class="inv-row"><span>نوع التوصيل</span><b>${order.order_type}</b></div>` : ''}
+      ${order.notes ? `<div class="inv-row"><span>ملاحظات</span><b>${order.notes}</b></div>` : ''}
+
+      ${itemsArr.length > 0 ? `
+        <div class="inv-items-title">الوجبات المطلوبة</div>
+        ${itemsArr.map(it => `
+          <div class="inv-item">
+            <span class="inv-item-name">${it.name}</span>
+            <span class="inv-item-qty">× ${it.qty}</span>
+            <span class="inv-item-price">${it.price * it.qty} ج</span>
+          </div>`).join('')}
+      ` : ''}
+
+      <div class="inv-total-box">
+        ${sub > 0 ? `
+          <div class="inv-total-row"><span>مجموع الوجبات</span><span>${sub} ج</span></div>
+          <div class="inv-total-row"><span>رسوم التوصيل</span><span>${delivery} ج</span></div>
+        ` : ''}
+        <div class="inv-grand"><span>الإجمالي</span><span>${grand} ج</span></div>
+      </div>
+
+      <div class="inv-footer">
+        امسح الباركود لتتبع طلبك<br>شكراً لاختيارك طيّار ❤️
+      </div>`;
+
+    document.getElementById('invModalBg').classList.add('show');
+  }, 300);
+};
+
+window.closeInvoice = function() {
+  document.getElementById('invModalBg').classList.remove('show');
+  _currentInvoiceOrder = null;
+};
+
+window.downloadInvoicePDF = function() {
+  const order = _currentInvoiceOrder;
+  if (!order) return;
+
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation: 'p', unit: 'mm', format: [80, 200] });
+
+  let itemsArr = [];
+  try { itemsArr = order.items ? JSON.parse(order.items) : []; } catch(e) {}
+  const sub      = itemsArr.reduce((s, it) => s + it.price * it.qty, 0);
+  const delivery = order.total && sub ? order.total - sub : 15;
+  const grand    = order.total || sub + delivery;
+
+  const W = 80;
+  let y = 10;
+
+  // Helper
+  const line  = (txt, x, yy, size=10, bold=false, align='right') => {
+    doc.setFontSize(size);
+    doc.setFont('helvetica', bold ? 'bold' : 'normal');
+    doc.text(txt, x, yy, { align });
+  };
+  const dline = (yy) => { doc.setDrawColor(220); doc.line(5, yy, W-5, yy); };
+
+  // Header
+  doc.setFillColor(255, 107, 53);
+  doc.rect(0, 0, W, 18, 'F');
+  doc.setTextColor(255,255,255);
+  line('Tayar Delivery', W/2, 8, 14, true, 'center');
+  line('Invoice / Fatura', W/2, 14, 8, false, 'center');
+  doc.setTextColor(30, 30, 30);
+  y = 24;
+
+  line(`Order #${order.order_number}`, W-5, y, 10, true, 'right'); y += 6;
+  const now = new Date();
+  line(now.toLocaleDateString('en-GB'), W-5, y, 8, false, 'right'); y += 2;
+  dline(y); y += 5;
+
+  line('Customer:', 5, y, 8, true, 'left');
+  line(order.customer_name, W-5, y, 8, false, 'right'); y += 5;
+  line('Phone:', 5, y, 8, true, 'left');
+  line(order.phone, W-5, y, 8, false, 'right'); y += 5;
+  if (order.restaurant) {
+    line('Restaurant:', 5, y, 8, true, 'left');
+    line(order.restaurant, W-5, y, 8, false, 'right'); y += 5;
+  }
+  dline(y); y += 5;
+
+  if (itemsArr.length > 0) {
+    line('ITEMS', W/2, y, 8, true, 'center'); y += 5;
+    itemsArr.forEach(it => {
+      line(`${it.name}`, 5, y, 8, false, 'left');
+      line(`x${it.qty}  ${it.price * it.qty} EGP`, W-5, y, 8, false, 'right');
+      y += 5;
+    });
+    dline(y); y += 5;
+  }
+
+  if (sub > 0) {
+    line('Subtotal:', 5, y, 8, false, 'left');
+    line(`${sub} EGP`, W-5, y, 8, false, 'right'); y += 5;
+    line('Delivery:', 5, y, 8, false, 'left');
+    line(`${delivery} EGP`, W-5, y, 8, false, 'right'); y += 5;
+    dline(y); y += 5;
+  }
+
+  // Grand total highlight
+  doc.setFillColor(255, 248, 240);
+  doc.rect(5, y-3, W-10, 10, 'F');
+  doc.setTextColor(255, 107, 53);
+  line('TOTAL:', 5, y+4, 11, true, 'left');
+  line(`${grand} EGP`, W-5, y+4, 11, true, 'right');
+  doc.setTextColor(30, 30, 30);
+  y += 14;
+
+  // QR Code — generate as canvas then embed
+  const tmpDiv = document.createElement('div');
+  tmpDiv.style.cssText = 'position:absolute;opacity:0;width:60px;height:60px';
+  document.body.appendChild(tmpDiv);
+  const trackUrl = `${location.origin}/track.html?order=${order.order_number}`;
+  new QRCode(tmpDiv, { text: trackUrl, width: 60, height: 60, correctLevel: QRCode.CorrectLevel.M });
+
+  setTimeout(() => {
+    const canvas = tmpDiv.querySelector('canvas');
+    if (canvas) {
+      const qrData = canvas.toDataURL('image/png');
+      const qrX = (W - 30) / 2;
+      doc.addImage(qrData, 'PNG', qrX, y, 30, 30);
+      y += 33;
+    }
+    document.body.removeChild(tmpDiv);
+
+    dline(y); y += 5;
+    doc.setTextColor(150);
+    line('Scan QR to track your order', W/2, y, 7, false, 'center'); y += 5;
+    line('Thank you for choosing Tayar!', W/2, y, 7, false, 'center');
+
+    doc.save(`tayar-invoice-${order.order_number}.pdf`);
+    showToast('✅ تم تحميل الفاتورة!', 'success');
+  }, 400);
+};
+
+// Patch loadOrders to also cache for invoices
+const _origLoadFn = loadOrders;
+window.loadOrders = async function() {
+  await _origLoadFn();
+  const { data } = await client.from('orders').select('*').order('id', { ascending: false });
+  if (data) _allOrders = data;
+};
+
+// loadOrders(); // handled by login check above
+setInterval(() => {
+  if (sessionStorage.getItem('tayar_auth') && !document.hidden) loadOrders();
+}, 3000);
+</script>
+</body>
+</html>
