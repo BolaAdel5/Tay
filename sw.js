@@ -1,3 +1,4 @@
+// v3 updated 2026-05-30 04:28
 const CACHE_NAME = 'tayar-v2';
 const STATIC_ASSETS = [
   '/',
